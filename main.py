@@ -1,9 +1,30 @@
-from fastapi import FastAPI, HTTPException, Response
+from fastapi import FastAPI, HTTPException, Response, Depends
 from datetime import datetime, timedelta
-from typing import Any
+from typing import Annotated, Any
 from random import randint
-app = FastAPI(root_path="/api/v1")
+from fastapi.concurrency import asynccontextmanager
+from sqlmodel import Session, create_engine, SQLModel
 
+sqlite_file = "database.db"
+sqlite_url = f"sqlite:///{sqlite_file}"
+connect_args = {"check_same_thread": False} # only for SQLite, needed for multithreading
+engine = create_engine(sqlite_url, connect_args=connect_args)
+
+def create_db_and_tables():
+    SQLModel.metadata.create_all(engine)
+    
+def get_session():
+    with Session(engine) as session:
+        yield session
+    
+SessionDep =  Annotated[Session, Depends(get_session)]
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    create_db_and_tables()
+    yield
+    
+app = FastAPI(root_path="/api/v1", lifespan=lifespan)
 
 @app.get("/")
 async def read_root():
